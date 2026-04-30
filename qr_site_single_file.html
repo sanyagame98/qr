@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Portal</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    :root {
+      --bg1: #f8fafc;
+      --bg2: #ffffff;
+      --bg3: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --card: rgba(255,255,255,.88);
+      --border: rgba(15,23,42,.08);
+      --shadow: 0 20px 60px rgba(15,23,42,.12);
+      --radius: 28px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
+    }
+    .hidden { display: none !important; }
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 50;
+    }
+    .loading-screen {
+      background: linear-gradient(135deg, #020617, #0f172a, #1e293b);
+      color: #fff;
+    }
+    .loading-card, .captcha-card {
+      width: min(100%, 440px);
+      border-radius: 32px;
+      padding: 28px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.35);
+    }
+    .loading-card {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(14px);
+    }
+    .captcha-screen {
+      background: rgba(2, 6, 23, .62);
+      backdrop-filter: blur(8px);
+    }
+    .captcha-card {
+      background: #fff;
+      color: var(--text);
+    }
+    .logo {
+      width: 82px;
+      height: 82px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 18px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.14);
+      font-size: 34px;
+      animation: pulse 1.6s infinite;
+    }
+    .progress-track {
+      margin-top: 22px;
+      height: 12px;
+      background: rgba(255,255,255,.14);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #fff;
+      border-radius: inherit;
+      transition: width .25s ease;
+    }
+    .loading-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      color: rgba(255,255,255,.75);
+      font-size: 12px;
+    }
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 30px 20px 34px;
+      transition: filter .35s ease, opacity .35s ease;
+    }
+    .locked {
+      filter: blur(8px);
+      user-select: none;
+      pointer-events: none;
+    }
+    .tabs {
+      display: inline-flex;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(255,255,255,.9);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn, .btn {
+      border: 0;
+      cursor: pointer;
+      transition: transform .15s ease, background .2s ease, opacity .2s ease;
+      font: inherit;
+    }
+    .tab-btn:hover, .btn:hover { transform: translateY(-1px); }
+    .tab-btn {
+      padding: 14px 18px;
+      border-radius: 18px;
+      background: #f1f5f9;
+      color: #475569;
+      font-weight: 600;
+    }
+    .tab-btn.active {
+      background: #0f172a;
+      color: #fff;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      backdrop-filter: blur(6px);
+    }
+    .title-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .icon-box {
+      width: 52px;
+      height: 52px;
+      border-radius: 18px;
+      background: #0f172a;
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 24px;
+      flex: 0 0 auto;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .card h2 { font-size: 32px; line-height: 1.05; }
+    .card h3 { font-size: 28px; line-height: 1.1; }
+    .sub { color: var(--muted); margin-top: 6px; }
+    .field { margin-bottom: 16px; }
+    .label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+    .input-wrap { position: relative; }
+    .input-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #94a3b8;
+    }
+    input[type="text"], input[type="number"], input[type="file"] {
+      width: 100%;
+      height: 48px;
+      border-radius: 18px;
+      border: 1px solid #dbe3ee;
+      background: #fff;
+      padding: 0 16px;
+      outline: none;
+      font: inherit;
+      color: var(--text);
+    }
+    input.with-icon { padding-left: 40px; }
+    input:focus { border-color: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,.15); }
+    .hint { margin-top: 8px; font-size: 14px; color: var(--muted); word-break: break-all; }
+    .error { color: #dc2626; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn {
+      height: 46px;
+      border-radius: 18px;
+      padding: 0 18px;
+      background: #0f172a;
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn.secondary { background: #e2e8f0; color: #0f172a; }
+    .btn.outline { background: #fff; color: #0f172a; border: 1px solid #dbe3ee; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .preview {
+      min-height: 420px;
+      border-radius: 28px;
+      background: #f8fafc;
+      border: 1px dashed #dbe3ee;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      padding: 24px;
+      text-align: center;
+    }
+    .muted-icon {
+      font-size: 64px;
+      color: #94a3b8;
+      animation: pulse 1.8s infinite;
+    }
+    #qrcode {
+      background: #fff;
+      padding: 24px;
+      border-radius: 28px;
+      box-shadow: 0 18px 40px rgba(15,23,42,.12);
+      display: inline-flex;
+    }
+    #qrcode img, #qrcode canvas { display: block; }
+    .paste-box {
+      border-radius: 24px;
+      border: 1px dashed #cbd5e1;
+      background: #f8fafc;
+      padding: 24px;
+      text-align: center;
+    }
+    .result-box {
+      margin-top: 16px;
+      background: #f8fafc;
+      border-radius: 24px;
+      padding: 16px;
+    }
+    .result-value {
+      margin-top: 10px;
+      border-radius: 18px;
+      background: #fff;
+      padding: 16px;
+      font-size: 14px;
+      word-break: break-all;
+      box-shadow: 0 10px 24px rgba(15,23,42,.06);
+    }
+    .direct-link {
+      display: inline-block;
+      margin-top: 12px;
+      color: #2563eb;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      word-break: break-all;
+    }
+    .preview-image {
+      max-width: 100%;
+      max-height: 360px;
+      border-radius: 22px;
+      box-shadow: 0 18px 36px rgba(15,23,42,.12);
+      object-fit: contain;
+    }
+    .footer {
+      margin-top: 26px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .footer a {
+      color: #334155;
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+    .captcha-check {
+      width: 100%;
+      text-align: left;
+      border: 1px solid #e2e8f0;
+      border-radius: 24px;
+      padding: 16px;
+      background: #fff;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      cursor: pointer;
+    }
+    .check-box {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: transparent;
+      flex: 0 0 auto;
+    }
+    .check-box.active {
+      background: #0f172a;
+      border-color: #0f172a;
+      color: #fff;
+    }
+    .captcha-math {
+      border-radius: 24px;
+      background: #f8fafc;
+      padding: 18px;
+      text-align: center;
+    }
+    .captcha-math strong { display: block; margin-top: 8px; font-size: 34px; }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.06); opacity: .88; }
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .card h2 { font-size: 28px; }
+      .card h3 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingScreen" class="screen loading-screen">
+    <div class="loading-card">
+      <div class="logo">▦</div>
+      <div style="text-align:center;">
+        <h1>QR Portal</h1>
+        <p class="sub" style="color:rgba(255,255,255,.8)">Загрузка защищённого интерфейса...</p>
+      </div>
+      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+      <div class="loading-meta">
+        <span>Инициализация модулей</span>
+        <span id="progressText">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="captchaScreen" class="screen captcha-screen hidden">
+    <div class="captcha-card">
+      <div style="text-align:center; margin-bottom:18px;">
+        <div style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;background:#f1f5f9;margin:0 auto 14px;font-size:26px;">🛡️</div>
+        <h2 style="font-size:30px;">Проверка доступа</h2>
+        <p class="sub">Пройди капчу, чтобы открыть сайт.</p>
+      </div>
+
+      <div id="captchaStep1">
+        <button id="captchaCheckbox" class="captcha-check">
+          <div id="captchaCheckMark" class="check-box">✓</div>
+          <div>
+            <div style="font-weight:700; color:#1e293b;">Я не робот</div>
+            <div class="sub" style="font-size:14px;">Подтверди вход в защищённую область</div>
+          </div>
+        </button>
+        <button id="captchaContinue" class="btn" style="width:100%; margin-top:14px;">Продолжить</button>
+      </div>
+
+      <div id="captchaStep2" class="hidden">
+        <div class="captcha-math">
+          <div class="sub">Реши пример</div>
+          <strong id="captchaExpression">7 + 5 = ?</strong>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label class="label" for="captchaAnswer">Ответ</label>
+          <input id="captchaAnswer" type="number" placeholder="Введи число" />
+        </div>
+        <button id="captchaVerify" class="btn" style="width:100%;">Подтвердить</button>
+      </div>
+
+      <p id="captchaError" class="error" style="margin-top:14px;"></p>
+    </div>
+  </div>
+
+  <div id="app" class="container locked">
+    <div class="tabs">
+      <button id="tabGenerator" class="tab-btn active">Создать QR</button>
+      <button id="tabScanner" class="tab-btn">Сканер QR</button>
+    </div>
+
+    <div id="generatorView" class="grid">
+      <section class="card">
+        <div class="title-row">
+          <div class="icon-box">⌁</div>
+          <div>
+            <h2>QR из ссылки</h2>
+            <p class="sub">Вставь ссылку — сайт сразу сгенерирует QR-код.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="urlInput">Ссылка</label>
+          <div class="input-wrap">
+            <span class="input-icon">🔗</span>
+            <input id="urlInput" class="with-icon" type="text" placeholder="например: openai.com" />
+          </div>
+          <div id="urlHint" class="hint"></div>
+        </div>
+
+        <div class="actions">
+          <button id="copyGeneratedBtn" class="btn" disabled>📋 Копировать ссылку</button>
+          <button id="downloadBtn" class="btn secondary" disabled>⬇️ Скачать QR</button>
+          <button id="clearGeneratedBtn" class="btn outline">🧹 Очистить</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div style="margin-bottom:18px;">
+          <h3>Предпросмотр</h3>
+          <p class="sub">QR-код появится здесь после ввода ссылки.</p>
+        </div>
+        <div class="preview" id="generatorPreview">
+          <div id="emptyGeneratorState">
+            <div class="muted-icon">▦</div>
+            <p style="font-size:20px; font-weight:700; color:#64748b; margin-top:8px;">Здесь будет твой QR-код</p>
+            <p class="sub" style="margin-top:8px; max-width:360px;">Вставь корректную ссылку слева, и код сгенерируется автоматически.</p>
+          </div>
+          <div id="qrArea" class="hidden" style="display:flex; flex-direction:column; align-items:center; gap:18px;">
+            <div id="qrcode"></div>
+            <div id="generatedUrl" class="hint" style="text-align:center; max-width:420px;"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="scannerView" class="grid hidden">
+      <section class="card">
+        <div style="margin-bottom:18px;">
+          <h2>Сканер QR</h2>
+          <p class="sub">Загрузи изображение из хранилища или вставь скопированную картинку через Ctrl/Cmd+V.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="fileInput">Изображение с QR</label>
+          <input id="fileInput" type="file" accept="image/*" />
+        </div>
+
+        <div class="paste-box">
+          <p style="font-weight:700; color:#334155;">Вставка из буфера</p>
+          <p class="sub" style="margin-top:8px;">Скопируй изображение с QR-кодом и вставь его сюда или просто нажми Ctrl/Cmd+V на этой вкладке.</p>
+        </div>
+
+        <p id="scanStatus" class="hint" style="margin-top:12px;"></p>
+        <p id="scanError" class="hint error"></p>
+
+        <div id="scanResultBox" class="result-box hidden">
+          <p style="font-size:14px; font-weight:700; color:#334155;">Результат</p>
+          <div id="scanResultValue" class="result-value"></div>
+          <a id="scanDirectLink" class="direct-link hidden" target="_blank" rel="noopener noreferrer">Открыть ссылку напрямую</a>
+          <div class="actions" style="margin-top:14px;">
+            <button id="copyScanBtn" class="btn">📋 Копировать текст</button>
+            <button id="openScanBtn" class="btn secondary">↗ Открыть как ссылку</button>
+            <button id="clearScanBtn" class="btn outline">🧹 Очистить</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div style="margin-bottom:18px;">
+          <h3>Предпросмотр изображения</h3>
+          <p class="sub">После загрузки или вставки здесь появится картинка.</p>
+        </div>
+        <div class="preview">
+          <img id="previewImage" class="preview-image hidden" alt="QR preview" />
+          <div id="emptyScanState">
+            <div class="muted-icon">🖼️</div>
+            <p style="font-size:20px; font-weight:700; color:#64748b; margin-top:8px;">Изображение пока не загружено</p>
+            <p class="sub" style="margin-top:8px; max-width:360px;">Выбери файл или вставь скопированную картинку, чтобы распознать QR-код.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="footer">
+      Сайт создан <a href="https://t.me/hostnetru" target="_blank" rel="noopener noreferrer">#pyth0n</a>
+    </div>
+  </div>
+
+  <script>
+    const loadingScreen = document.getElementById('loadingScreen');
+    const captchaScreen = document.getElementById('captchaScreen');
+    const app = document.getElementById('app');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+
+    const tabGenerator = document.getElementById('tabGenerator');
+    const tabScanner = document.getElementById('tabScanner');
+    const generatorView = document.getElementById('generatorView');
+    const scannerView = document.getElementById('scannerView');
+
+    const urlInput = document.getElementById('urlInput');
+    const urlHint = document.getElementById('urlHint');
+    const copyGeneratedBtn = document.getElementById('copyGeneratedBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const clearGeneratedBtn = document.getElementById('clearGeneratedBtn');
+    const qrcodeEl = document.getElementById('qrcode');
+    const qrArea = document.getElementById('qrArea');
+    const emptyGeneratorState = document.getElementById('emptyGeneratorState');
+    const generatedUrl = document.getElementById('generatedUrl');
+
+    const fileInput = document.getElementById('fileInput');
+    const scanStatus = document.getElementById('scanStatus');
+    const scanError = document.getElementById('scanError');
+    const scanResultBox = document.getElementById('scanResultBox');
+    const scanResultValue = document.getElementById('scanResultValue');
+    const scanDirectLink = document.getElementById('scanDirectLink');
+    const copyScanBtn = document.getElementById('copyScanBtn');
+    const openScanBtn = document.getElementById('openScanBtn');
+    const clearScanBtn = document.getElementById('clearScanBtn');
+    const previewImage = document.getElementById('previewImage');
+    const emptyScanState = document.getElementById('emptyScanState');
+
+    const captchaCheckbox = document.getElementById('captchaCheckbox');
+    const captchaCheckMark = document.getElementById('captchaCheckMark');
+    const captchaContinue = document.getElementById('captchaContinue');
+    const captchaVerify = document.getElementById('captchaVerify');
+    const captchaStep1 = document.getElementById('captchaStep1');
+    const captchaStep2 = document.getElementById('captchaStep2');
+    const captchaError = document.getElementById('captchaError');
+    const captchaAnswer = document.getElementById('captchaAnswer');
+    const captchaExpression = document.getElementById('captchaExpression');
+
+    let qrInstance = null;
+    let currentFinalUrl = '';
+    let scanResult = '';
+    let currentTab = 'generator';
+    let captchaChecked = false;
+
+    const captchaA = Math.floor(Math.random() * 6) + 4;
+    const captchaB = Math.floor(Math.random() * 6) + 5;
+    captchaExpression.textContent = `${captchaA} + ${captchaB} = ?`;
+
+    function normalizeUrl(value) {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (/^https?:\/\//i.test(trimmed)) return trimmed;
+      return `https://${trimmed}`;
+    }
+
+    function isLikelyUrl(value) {
+      const normalized = normalizeUrl(value);
+      try {
+        const url = new URL(normalized);
+        return !!url.hostname && url.hostname.includes('.');
+      } catch {
+        return false;
+      }
+    }
+
+    function toOpenableUrl(value) {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (/^(https?:\/\/|mailto:|tel:)/i.test(trimmed)) return trimmed;
+      if (/^[^\s]+\.[^\s]+/.test(trimmed)) return `https://${trimmed}`;
+      return '';
+    }
+
+    async function copyText(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {}
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      const generatorActive = tab === 'generator';
+      tabGenerator.classList.toggle('active', generatorActive);
+      tabScanner.classList.toggle('active', !generatorActive);
+      generatorView.classList.toggle('hidden', !generatorActive);
+      scannerView.classList.toggle('hidden', generatorActive);
+    }
+
+    function renderQr(url) {
+      qrcodeEl.innerHTML = '';
+      qrInstance = new QRCode(qrcodeEl, {
+        text: url,
+        width: 320,
+        height: 320,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+
+    function updateGenerator() {
+      const raw = urlInput.value;
+      const valid = isLikelyUrl(raw);
+      currentFinalUrl = valid ? normalizeUrl(raw) : '';
+
+      copyGeneratedBtn.disabled = !valid;
+      downloadBtn.disabled = !valid;
+
+      if (!raw) {
+        urlHint.textContent = '';
+      } else if (!valid) {
+        urlHint.textContent = 'Похоже, это не ссылка. Проверь адрес.';
+        urlHint.classList.add('error');
+      } else {
+        urlHint.textContent = `Будет открываться: ${currentFinalUrl}`;
+        urlHint.classList.remove('error');
+      }
+
+      if (valid) {
+        emptyGeneratorState.classList.add('hidden');
+        qrArea.classList.remove('hidden');
+        generatedUrl.textContent = currentFinalUrl;
+        renderQr(currentFinalUrl);
+      } else {
+        qrArea.classList.add('hidden');
+        emptyGeneratorState.classList.remove('hidden');
+        qrcodeEl.innerHTML = '';
+      }
+    }
+
+    async function downloadQr() {
+      const canvas = qrcodeEl.querySelector('canvas');
+      const img = qrcodeEl.querySelector('img');
+      let src = '';
+
+      if (canvas) src = canvas.toDataURL('image/png');
+      if (!src && img) src = img.src;
+      if (!src) return;
+
+      const link = document.createElement('a');
+      link.href = src;
+      link.download = 'qr-code.png';
+      link.click();
+    }
+
+    function clearGenerator() {
+      urlInput.value = '';
+      currentFinalUrl = '';
+      copyGeneratedBtn.textContent = '📋 Копировать ссылку';
+      updateGenerator();
+    }
+
+    function resetScan() {
+      scanStatus.textContent = '';
+      scanError.textContent = '';
+      scanResult = '';
+      scanResultBox.classList.add('hidden');
+      scanResultValue.textContent = '';
+      scanDirectLink.classList.add('hidden');
+      scanDirectLink.removeAttribute('href');
+      openScanBtn.disabled = false;
+      copyScanBtn.textContent = '📋 Копировать текст';
+      previewImage.classList.add('hidden');
+      previewImage.removeAttribute('src');
+      emptyScanState.classList.remove('hidden');
+      fileInput.value = '';
+    }
+
+    function showScanResult(text, previewSrc) {
+      scanStatus.textContent = '';
+      scanError.textContent = '';
+      scanResult = text;
+      scanResultValue.textContent = text;
+      scanResultBox.classList.remove('hidden');
+
+      if (previewSrc) {
+        previewImage.src = previewSrc;
+        previewImage.classList.remove('hidden');
+        emptyScanState.classList.add('hidden');
+      }
+
+      const link = toOpenableUrl(text);
+      if (link) {
+        scanDirectLink.href = link;
+        scanDirectLink.classList.remove('hidden');
+        openScanBtn.disabled = false;
+      } else {
+        scanDirectLink.classList.add('hidden');
+        openScanBtn.disabled = true;
+      }
+    }
+
+    function loadFileAsImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = String(reader.result || '');
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function processFile(file) {
+      scanStatus.textContent = 'Сканирую изображение...';
+      scanError.textContent = '';
+      copyScanBtn.textContent = '📋 Копировать текст';
+      try {
+        const img = await loadFileAsImage(file);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) throw new Error('Не удалось открыть изображение.');
+
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(data.data, data.width, data.height);
+
+        if (!code || !code.data) throw new Error('QR-код не найден на изображении.');
+        showScanResult(code.data, img.src);
+      } catch (err) {
+        resetScan();
+        scanError.textContent = err && err.message ? err.message : 'Не удалось распознать QR-код.';
+      } finally {
+        scanStatus.textContent = '';
+      }
+    }
+
+    function startLoading() {
+      let progress = 0;
+      const timer = setInterval(() => {
+        progress += Math.floor(Math.random() * 18 + 8);
+        if (progress > 100) progress = 100;
+        progressBar.style.width = progress + '%';
+        progressText.textContent = progress + '%';
+        if (progress >= 100) {
+          clearInterval(timer);
+          setTimeout(() => {
+            loadingScreen.classList.add('hidden');
+            captchaScreen.classList.remove('hidden');
+          }, 260);
+        }
+      }, 220);
+    }
+
+    captchaCheckbox.addEventListener('click', () => {
+      captchaChecked = !captchaChecked;
+      captchaCheckMark.classList.toggle('active', captchaChecked);
+      captchaError.textContent = '';
+    });
+
+    captchaContinue.addEventListener('click', () => {
+      if (!captchaChecked) {
+        captchaError.textContent = 'Подтверди, что ты не робот.';
+        return;
+      }
+      captchaError.textContent = '';
+      captchaStep1.classList.add('hidden');
+      captchaStep2.classList.remove('hidden');
+    });
+
+    captchaVerify.addEventListener('click', () => {
+      if (String(captchaA + captchaB) !== captchaAnswer.value.trim()) {
+        captchaError.textContent = 'Неверный ответ. Попробуй ещё раз.';
+        return;
+      }
+      captchaScreen.classList.add('hidden');
+      app.classList.remove('locked');
+    });
+
+    tabGenerator.addEventListener('click', () => switchTab('generator'));
+    tabScanner.addEventListener('click', () => switchTab('scanner'));
+
+    urlInput.addEventListener('input', updateGenerator);
+
+    copyGeneratedBtn.addEventListener('click', async () => {
+      if (!currentFinalUrl) return;
+      const ok = await copyText(currentFinalUrl);
+      if (ok) {
+        copyGeneratedBtn.textContent = '📋 Скопировано';
+        setTimeout(() => copyGeneratedBtn.textContent = '📋 Копировать ссылку', 1500);
+      }
+    });
+
+    downloadBtn.addEventListener('click', downloadQr);
+    clearGeneratedBtn.addEventListener('click', clearGenerator);
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) await processFile(file);
+    });
+
+    window.addEventListener('paste', async (e) => {
+      if (currentTab !== 'scanner') return;
+      const items = e.clipboardData && e.clipboardData.items ? Array.from(e.clipboardData.items) : [];
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          e.preventDefault();
+          await processFile(file);
+          break;
+        }
+      }
+    });
+
+    copyScanBtn.addEventListener('click', async () => {
+      if (!scanResult) return;
+      const ok = await copyText(scanResult);
+      if (ok) {
+        copyScanBtn.textContent = '📋 Скопировано';
+        setTimeout(() => copyScanBtn.textContent = '📋 Копировать текст', 1500);
+      }
+    });
+
+    openScanBtn.addEventListener('click', () => {
+      const link = toOpenableUrl(scanResult);
+      if (!link) return;
+      const a = document.createElement('a');
+      a.href = link;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    clearScanBtn.addEventListener('click', resetScan);
+
+    startLoading();
+    updateGenerator();
+  </script>
+</body>
+</html>
